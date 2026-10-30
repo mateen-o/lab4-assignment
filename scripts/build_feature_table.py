@@ -42,6 +42,19 @@ check_row_count("Gene counts after pivot to wide", expected_patient_count, len(g
 feature_table = patient_base.merge(gene_counts_wide, on="patient_id", how="left", validate="one_to_one")
 check_row_count("Feature table after join", expected_patient_count, len(feature_table))
 
+# The 4 tumors with no mutation calls keep 0 in the gene columns.
+print(f"Tumors with no mutation calls (kept as 0, flagged): {int((feature_table['has_mutation_calls'] == 0).sum())}")
+
+# Ages are stored as decimals (70.0) but are whole years.
+recorded_ages = feature_table["age_at_diagnosis"].dropna()
+if not (recorded_ages == recorded_ages.round()).all():
+    raise SystemExit("age_at_diagnosis has fractional values; not converting to whole years")
+feature_table["age_at_diagnosis"] = feature_table["age_at_diagnosis"].astype("Int64")
+
+# Count missing values per column, for the Task 4 write-up.
+print("Missing values (NA) per column:")
+print(feature_table.isna().sum())
+
 output_path = project_folder / "output" / "feature_table.tsv"
 feature_table.to_csv(output_path, sep="\t", index=False, na_rep="NA")
 print(f"Wrote {output_path.name}: {len(feature_table)} rows x {feature_table.shape[1]} columns")
