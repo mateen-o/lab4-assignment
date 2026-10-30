@@ -59,3 +59,10 @@ output_path = project_folder / "output" / "feature_table.tsv"
 feature_table.to_csv(output_path, sep="\t", index=False, na_rep="NA")
 print(f"Wrote {output_path.name}: {len(feature_table)} rows x {feature_table.shape[1]} columns")
 print(feature_table.head())
+
+# Row counts can't catch wrong values
+for gene_symbol in target_genes:
+    direct_mutation_count = database_connection.execute("SELECT COUNT(*) FROM mutations WHERE gene_symbol = ? AND variant_classification <> 'Silent'", (gene_symbol,)).fetchone()[0]
+    check_row_count(f"{gene_symbol} mutations counted in the table", direct_mutation_count, int(feature_table[f"{gene_symbol.lower()}_protein_altering_count"].sum()))
+
+database_connection.close()
