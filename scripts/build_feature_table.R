@@ -30,4 +30,33 @@ gene_counts_long <- dbGetQuery(database_connection, read_sql_file("01_gene_count
 check_row_count("Query 1: gene counts, long format", expected_patient_count * length(target_genes), nrow(gene_counts_long))
 
 dbDisconnect(database_connection)
-print(head(gene_counts_long, 10))
+
+repeated_patient_gene_pairs <- sum(duplicated(gene_counts_long[, c("patient_id", "gene_symbol")]))
+check_row_count("Repeated patient-gene pairs (must be none)", 0, repeated_patient_gene_pairs)
+
+# Long to wide: one row per patient, one column per gene
+gene_counts_wide <- pivot_wider(gene_counts_long, names_from = gene_symbol, values_from = protein_altering_count)
+gene_counts_wide <- gene_counts_wide[, c("patient_id", target_genes)]
+names(gene_counts_wide) <- c("patient_id", paste0(tolower(target_genes), "_protein_altering_count"))
+check_row_count("Gene counts after pivot to wide", expected_patient_count, nrow(gene_counts_wide))
+
+# Keep every patient
+feature_table <- left_join(patient_base, gene_counts_wide, by = "patient_id", relationship = "one-to-one")
+check_row_count("Feature table after join", expected_patient_count, nrow(feature_table))
+
+# Ages are whole years stored as decimals.
+recorded_ages <- na.omit(feature_table$age_at_diagnosis)
+if (any(recorded_ages != round(recorded_ages))) stop("age_at_diagnosis has fractional values", call. = FALSE)
+feature_table$age_at_diagnosis <- as.integer(feature_table$age_at_diagnosis)
+
+cat("Missing values (NA) per column:\n")
+print(colSums(is.na(feature_table)))
+
+write_tsv(feature_table, file.path("output", "feature_table_r.tsv"), na = "NA")
+cat("Wrote feature_table_r.tsv:", nrow(feature_table), "rows x", ncol(feature_table), "columns\n")
+
+# Read both tables back and compare every value
+python_table <- read_tsv(file.path("output", "feature_table.tsv"), show_col_types = FALSE)
+r_table <- read_tsv(file.path("output", "feature_table_r.tsv"), show_col_types = FALSE)
+if (!isTRUE(all.equal(as.data.frame(python_table), as.data.frame(r_table)))) stop("R and Python tables differ", call. = FALSE)
+cat("R table matches the Python table\n")
